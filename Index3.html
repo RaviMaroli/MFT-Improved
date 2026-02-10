@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mutual Fund Tracker</title>
+
+<style>
+/* ---------- GLOBAL BACKGROUND ---------- */
+body {
+  font-family: Arial, sans-serif;
+  padding: 12px;
+  color: #eaeaea;
+  background-color: #000;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cg fill='rgba(0,220,120,0.25)' font-family='Arial'%3E%3Ctext x='10' y='50' font-size='60' transform='rotate(-25 10 50)'%3E₹%3C/text%3E%3Ctext x='90' y='90' font-size='80' transform='rotate(15 90 90)'%3E₹%3C/text%3E%3Ctext x='40' y='160' font-size='100' transform='rotate(-40 40 160)'%3E₹%3C/text%3E%3Ctext x='120' y='150' font-size='50' transform='rotate(30 120 150)'%3E₹%3C/text%3E%3C/g%3E%3C/svg%3E");
+}
+
+/* ---------- TITLE ---------- */
+.title {
+  text-align: center;
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+
+/* ---------- SAVED PORTFOLIOS ---------- */
+.saved-tab {
+  position: relative;
+  text-align: center;
+  margin-bottom: 12px;
+}
+
+button {
+  padding: 6px 10px;
+  font-size: 15px;
+  cursor: pointer;
+  border-radius: 6px;
+  border: 1px solid #2ecc71;
+  background: transparent;
+  color: #2ecc71;
+}
+
+button:hover {
+  background: rgba(46,204,113,0.15);
+}
+
+.saved-list {
+  display: none;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  top: 36px;
+  background: #000;
+  border: 1px solid #2ecc71;
+  width: 240px;
+  z-index: 1000;
+}
+
+.saved-list div {
+  padding: 8px;
+  cursor: pointer;
+  border-bottom: 1px solid #2ecc71;
+}
+
+.saved-list div:hover {
+  background: rgba(46,204,113,0.15);
+}
+
+/* ---------- SEARCH ---------- */
+.container {
+  position: relative;
+  margin-bottom: 12px; /* 👈 one-line gap */
+}
+
+input {
+  width: 100%;
+  padding: 8px;
+  background: #000;
+  border: 1px solid #2ecc71;
+  color: #eaeaea;
+  font-size: 15px;
+}
+
+#fundDropdown {
+  position: absolute;
+  background: #000;
+  border: 1px solid #2ecc71;
+  width: 100%;
+  max-height: 160px;
+  overflow-y: auto;
+  display: none;
+  z-index: 1000;
+}
+
+#fundDropdown div {
+  padding: 6px;
+  cursor: pointer;
+}
+
+#fundDropdown div:hover {
+  background: rgba(46,204,113,0.15);
+}
+
+/* ---------- TABLE ---------- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 12px;
+  background-color: #000;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cg fill='rgba(255,165,0,0.12)' font-family='Arial'%3E%3Ctext x='30' y='80' font-size='70' transform='rotate(-20 30 80)'%3E₹%3C/text%3E%3Ctext x='120' y='160' font-size='90' transform='rotate(25 120 160)'%3E₹%3C/text%3E%3C/g%3E%3C/svg%3E");
+}
+
+th, td {
+  border: 1px solid #2ecc71;
+  padding: 8px;
+  text-align: center;
+  min-width: 90px;
+}
+
+th {
+  background: rgba(46,204,113,0.18);
+}
+
+.button-fund {
+  background: transparent;
+  border: 1px solid #2ecc71;
+  color: #2ecc71;
+  border-radius: 5px;
+  padding: 4px 8px;
+}
+
+.button-fund:hover {
+  background: rgba(46,204,113,0.15);
+}
+
+.editable {
+  cursor: pointer;
+}
+
+.profit { color: #4cff8f; font-weight: bold; }
+.loss { color: #ff6b6b; font-weight: bold; }
+
+.total-row {
+  font-weight: bold;
+  background: rgba(46,204,113,0.2);
+}
+
+/* ---------- SAVE ---------- */
+.save-box {
+  margin-top: 16px;
+  text-align: center;
+}
+</style>
+</head>
+
+<body>
+
+<div class="title">Mutual Fund Tracker</div>
+
+<div class="saved-tab">
+  <button id="savedBtn">
+    Saved Portfolios (<span id="savedCount">0</span>)
+  </button>
+  <div class="saved-list" id="savedList"></div>
+</div>
+
+<div class="container">
+  <input id="fundInput" placeholder="Search fund name">
+  <div id="fundDropdown"></div>
+</div>
+
+<button onclick="refreshNAVs()">🔄 Refresh NAVs</button>
+<button onclick="clearCurrent()">🧹 Clear Current</button>
+
+<table>
+<thead>
+<tr>
+  <th>Fund</th>
+  <th>NAV</th>
+  <th>Buy Avg</th>
+  <th>Investment</th>
+  <th>P/L</th>
+</tr>
+</thead>
+<tbody id="fundTable"></tbody>
+</table>
+
+<div class="save-box" id="saveBox" style="display:none;">
+  <button onclick="savePortfolio()">💾 Save Portfolio</button>
+</div>
+
+<script>
+let funds = [];
+let mfList = [];
+let portfolios = JSON.parse(localStorage.getItem("portfolios") || {});
+
+function normalize(str){
+  return str.toLowerCase().replace(/[^a-z0-9]/g,'');
+}
+
+function titleCase(str){
+  return str.toLowerCase().split(" ")
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+fetch("https://api.mfapi.in/mf")
+  .then(r => r.json())
+  .then(d => mfList = d);
+
+function render(){
+  const tbody = document.getElementById("fundTable");
+  tbody.innerHTML="";
+  let totalInv=0,totalPL=0;
+
+  funds.forEach((f,i)=>{
+    let pl=0;
+    if(f.buy && f.inv){
+      let units=f.inv/f.buy;
+      pl=units*f.nav-f.inv;
+      totalInv+=Number(f.inv);
+      totalPL+=pl;
+    }
+
+    tbody.innerHTML+=`
+    <tr>
+      <td><button class="button-fund" onclick="removeFund(${i})">${f.name}</button></td>
+      <td>${f.nav}</td>
+      <td class="editable" onclick="editCell(this,${i},'buy')">${f.buy}</td>
+      <td class="editable" onclick="editCell(this,${i},'inv')">${f.inv}</td>
+      <td class="${pl>=0?'profit':'loss'}">${pl.toFixed(2)}</td>
+    </tr>`;
+  });
+
+  if(funds.length){
+    tbody.innerHTML+=`
+    <tr class="total-row">
+      <td>Total</td><td>-</td><td>-</td>
+      <td>${totalInv.toFixed(2)}</td>
+      <td>${totalPL.toFixed(2)}</td>
+    </tr>`;
+  }
+
+  document.getElementById("saveBox").style.display =
+    funds.length ? "block" : "none";
+}
+
+function editCell(td,index,field){
+  const val=funds[index][field];
+  td.innerHTML=`<input type="number" value="${val}" style="width:100%">`;
+  const input=td.firstChild;
+  input.focus();
+  input.onblur=()=>{
+    funds[index][field]=Number(input.value)||0;
+    render();
+  };
+  input.onkeydown=e=>{ if(e.key==="Enter") input.blur(); };
+}
+
+function addFund(f){
+  fetch(`https://api.mfapi.in/mf/${f.schemeCode}`)
+    .then(r=>r.json())
+    .then(d=>{
+      funds.push({
+        name:titleCase(f.schemeName.replace(/-/g," ")),
+        code:f.schemeCode,
+        nav:parseFloat(d.data[0].nav),
+        buy:0,
+        inv:0
+      });
+      render();
+    });
+}
+
+function refreshNAVs(){
+  funds.forEach(f=>{
+    fetch(`https://api.mfapi.in/mf/${f.code}`)
+      .then(r=>r.json())
+      .then(d=>{f.nav=parseFloat(d.data[0].nav);render();});
+  });
+}
+
+function clearCurrent(){
+  if(confirm("Clear current portfolio?")){
+    funds=[];
+    render();
+  }
+}
+
+function removeFund(i){
+  if(confirm("Remove this fund?")){
+    funds.splice(i,1);
+    render();
+  }
+}
+
+function savePortfolio(){
+  let i=1;
+  while(portfolios[`Portfolio ${i}`]) i++;
+  let name=prompt("Enter portfolio name:",`Portfolio ${i}`);
+  if(!name) return;
+  if(portfolios[name] && !confirm("Overwrite existing portfolio?")) return;
+  portfolios[name]=JSON.parse(JSON.stringify(funds));
+  localStorage.setItem("portfolios",JSON.stringify(portfolios));
+  updateSavedList();
+}
+
+function updateSavedList(){
+  const list=document.getElementById("savedList");
+  list.innerHTML="";
+  Object.keys(portfolios).forEach(name=>{
+    let d=document.createElement("div");
+    d.textContent=name;
+    d.onclick=()=>{
+      funds=JSON.parse(JSON.stringify(portfolios[name]));
+      render();
+      list.style.display="none";
+    };
+    list.appendChild(d);
+  });
+  document.getElementById("savedCount").textContent=
+    Object.keys(portfolios).length;
+}
+
+document.getElementById("savedBtn").onclick=e=>{
+  e.stopPropagation();
+  const l=document.getElementById("savedList");
+  l.style.display=l.style.display==="block"?"none":"block";
+};
+
+document.body.onclick=()=>{
+  document.getElementById("savedList").style.display="none";
+};
+
+fundInput.oninput=()=>{
+  const qNorm=normalize(fundInput.value);
+  fundDropdown.innerHTML="";
+  if(!qNorm) return fundDropdown.style.display="none";
+
+  mfList.filter(f=>normalize(f.schemeName).includes(qNorm))
+    .slice(0,10)
+    .forEach(f=>{
+      let d=document.createElement("div");
+      d.textContent=titleCase(f.schemeName.replace(/-/g," "));
+      d.onclick=()=>{
+        addFund(f);
+        fundInput.value="";
+        fundDropdown.style.display="none";
+      };
+      fundDropdown.appendChild(d);
+    });
+
+  fundDropdown.style.display="block";
+};
+
+updateSavedList();
+</script>
+
+</body>
+</html>
