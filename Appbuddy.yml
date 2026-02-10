@@ -1,0 +1,17 @@
+name: AppBuddy Static HTML Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Static HTML app – no build step
+        run: echo "No build required for index.html"
