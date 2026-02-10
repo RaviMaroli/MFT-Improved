@@ -1,0 +1,10 @@
+version: 1
+
+pipeline:
+  type: static
+
+  source:
+    entry: index3.html
+
+  build:
+    steps: []
